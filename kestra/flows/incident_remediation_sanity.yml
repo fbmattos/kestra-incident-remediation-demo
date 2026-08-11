@@ -1,0 +1,167 @@
+id: incident_remediation_sanity
+namespace: demo.incident
+
+description: |
+  Sanity test for an enterprise incident-remediation demo.
+  Simulates a Billing Service incident, gathers diagnostics in parallel,
+  then either auto-remediates or escalates based on the selected scenario.
+
+inputs:
+  - id: scenario
+    type: SELECT
+    displayName: Incident scenario
+    defaults: SAFE_TO_REMEDIATE
+    values:
+      - SAFE_TO_REMEDIATE
+      - ESCALATE
+
+tasks:
+
+  - id: receive_alert
+    type: io.kestra.plugin.core.log.Log
+    message: |
+      🚨 INCIDENT RECEIVED
+      Service: Billing Service
+      Symptom: 5xx error rate spike
+      Scenario: {{ inputs.scenario }}
+
+  - id: gather_diagnostics
+    type: io.kestra.plugin.core.flow.Parallel
+    tasks:
+
+      - id: deployment_diagnostics
+        type: io.kestra.plugin.core.flow.Sequential
+        tasks:
+          - id: deployment_lookup_delay
+            type: io.kestra.plugin.core.flow.Sleep
+            duration: PT3S
+
+          - id: deployment_result
+            type: io.kestra.plugin.core.debug.Return
+            format: |
+              {% if inputs.scenario == "SAFE_TO_REMEDIATE" %}
+              Recent deployment detected: billing-v42 deployed 6 minutes ago
+              {% else %}
+              No recent deployment detected
+              {% endif %}
+
+      - id: application_health
+        type: io.kestra.plugin.core.flow.Sequential
+        tasks:
+          - id: health_lookup_delay
+            type: io.kestra.plugin.core.flow.Sleep
+            duration: PT2S
+
+          - id: health_result
+            type: io.kestra.plugin.core.debug.Return
+            format: |
+              Billing Service health: DEGRADED
+              HTTP 5xx rate: 17.8%
+              Healthy instances: 3/6
+
+      - id: error_signature
+        type: io.kestra.plugin.core.flow.Sequential
+        tasks:
+          - id: error_lookup_delay
+            type: io.kestra.plugin.core.flow.Sleep
+            duration: PT4S
+
+          - id: error_result
+            type: io.kestra.plugin.core.debug.Return
+            format: |
+              {% if inputs.scenario == "SAFE_TO_REMEDIATE" %}
+              Error signature: MEMORY_LEAK_AFTER_DEPLOY
+              Known failure mode: YES
+              {% else %}
+              Error signature: UNKNOWN_FAILURE_PATTERN
+              Known failure mode: NO
+              {% endif %}
+
+  - id: policy_decision
+    type: io.kestra.plugin.core.flow.Switch
+    value: "{{ inputs.scenario }}"
+    cases:
+
+      SAFE_TO_REMEDIATE:
+
+        - id: remediation_authorized
+          type: io.kestra.plugin.core.log.Log
+          message: |
+            ✅ INCIDENT IS INSIDE APPROVED AUTOMATION ENVELOPE
+
+            Conditions satisfied:
+            - Known failure mode
+            - Recent deployment detected
+            - Approved rollback action available
+
+            Proceeding with automated remediation.
+
+        - id: drain_traffic
+          type: io.kestra.plugin.core.log.Log
+          message: "Step 1/3: Draining traffic from affected deployment..."
+
+        - id: drain_wait
+          type: io.kestra.plugin.core.flow.Sleep
+          duration: PT2S
+
+        - id: rollback
+          type: io.kestra.plugin.core.log.Log
+          message: "Step 2/3: Rolling back billing-v42 → billing-v41..."
+
+        - id: rollback_wait
+          type: io.kestra.plugin.core.flow.Sleep
+          duration: PT2S
+
+        - id: verify_recovery
+          type: io.kestra.plugin.core.debug.Return
+          format: |
+            Step 3/3: Post-remediation validation
+
+            Billing Service health: HEALTHY
+            HTTP 5xx rate: 0.2%
+            Healthy instances: 6/6
+            Active deployment: billing-v41
+
+            RESULT: INCIDENT AUTOMATICALLY REMEDIATED
+
+      ESCALATE:
+
+        - id: automation_blocked
+          type: io.kestra.plugin.core.log.Log
+          message: |
+            🛑 AUTOMATED REMEDIATION BLOCKED
+
+            Incident does not match an approved remediation policy.
+
+            No production-changing action will be taken.
+
+        - id: prepare_escalation
+          type: io.kestra.plugin.core.debug.Return
+          format: |
+            HUMAN INTERVENTION REQUIRED
+
+            Service: Billing Service
+            Health: DEGRADED
+            HTTP 5xx rate: 17.8%
+            Recent deployment: NONE
+            Error signature: UNKNOWN_FAILURE_PATTERN
+            Automated action: BLOCKED
+
+            Diagnostics have been collected for the on-call engineer.
+
+  - id: execution_summary
+    type: io.kestra.plugin.core.log.Log
+    message: |
+      =================================================
+      INCIDENT WORKFLOW COMPLETE
+
+      Scenario: {{ inputs.scenario }}
+
+      {% if inputs.scenario == "SAFE_TO_REMEDIATE" %}
+      Outcome: AUTO-REMEDIATED
+      Human intervention: NOT REQUIRED
+      {% else %}
+      Outcome: ESCALATED
+      Human intervention: REQUIRED
+      {% endif %}
+      =================================================
