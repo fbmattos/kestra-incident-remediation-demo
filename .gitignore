@@ -1,0 +1,6 @@
+.env
+.env_encoded
+.DS_Store
+node_modules/
+.next/
+dist/
