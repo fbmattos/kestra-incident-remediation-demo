@@ -96,6 +96,7 @@ test('presentation uses the official logo and preserves payload history selectio
   const app = fs.readFileSync(path.join(__dirname, '..', 'public', 'app.js'), 'utf8');
   assert.match(html, /kestra-monogram\.svg/);
   assert.doesNotMatch(html, /Kestra Solution Simulation|Simulated enterprise systems|Production control plane/);
+  assert.doesNotMatch(html, /Production service|Decision outcome|Choose one deterministic production event/);
   assert.match(app, /inspectorSelectedIndex/);
   assert.match(app, /renderInspector\(inspectorSystem, inspectorSelectedIndex\)/);
 });

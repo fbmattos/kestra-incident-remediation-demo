@@ -23,21 +23,8 @@
     </header>
 
     <main>
-      <section class="summary" aria-label="Production service health">
-        <div class="summary-title">
-          <span class="pulse-dot" id="health-dot"></span>
-          <div><span>Production service</span><strong>Billing Service</strong></div>
-        </div>
-        <div class="metric"><span>Status</span><strong id="service-status" class="status healthy">HEALTHY</strong></div>
-        <div class="metric"><span>Deployment</span><strong id="deployment">billing-v42</strong></div>
-        <div class="metric"><span>HTTP 5xx</span><strong id="error-rate">0.3%</strong></div>
-        <div class="metric"><span>Kubernetes</span><strong id="replicas">6 / 6 Ready</strong></div>
-        <div class="metric"><span>ServiceNow</span><strong id="active-incident">No active incident</strong></div>
-        <div class="metric"><span>Incident time</span><strong id="elapsed">—</strong></div>
-      </section>
-
       <section class="controls" aria-label="Simulation controls">
-        <div><span class="section-kicker">Demo controls</span><p>Choose one deterministic production event.</p></div>
+        <div><span class="section-kicker">Demo controls</span></div>
         <button class="button primary" id="known-button"><span class="button-icon">↘</span> Simulate known deployment regression</button>
         <button class="button danger" id="unknown-button"><span class="button-icon">!</span> Simulate unknown production failure</button>
         <button class="button ghost" id="reset-button"><span class="button-icon">↺</span> Reset simulation</button>
@@ -88,11 +75,6 @@
           <div class="panel-heading"><div><span class="section-kicker">Runtime evidence</span><h2>Live Interaction Timeline</h2></div><span class="live-indicator" id="live-indicator"><i></i> IDLE</span></div>
           <div id="timeline" class="timeline"><div class="empty-state"><span>◇</span><p>Run a scenario to observe governed orchestration across systems.</p></div></div>
         </article>
-
-        <aside class="outcome-panel">
-          <div class="panel-heading"><div><span class="section-kicker">Decision outcome</span><h2 id="outcome-title">Awaiting incident</h2></div></div>
-          <div id="outcome-content" class="outcome-content"><p>The service is healthy. No orchestration is active.</p></div>
-        </aside>
       </section>
 
     </main>

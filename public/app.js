@@ -3,7 +3,6 @@ const systemNames = { datadog: 'Datadog', argocd: 'Argo CD', kubernetes: 'Kubern
 let currentState;
 let inspectorSystem = null;
 let inspectorSelectedIndex = null;
-let elapsedTimer;
 
 function clock(iso, withDate = false) {
   if (!iso) return '—';
@@ -11,8 +10,6 @@ function clock(iso, withDate = false) {
     ? { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' }
     : { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }).format(new Date(iso));
 }
-
-function pct(value) { return `${(value * 100).toFixed(1)}%`; }
 
 function syntax(value) {
   const escaped = JSON.stringify(value, null, 2).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -58,42 +55,9 @@ function renderTimeline(items) {
   if (items.length) $('timeline').scrollTop = $('timeline').scrollHeight;
 }
 
-function renderOutcome(state) {
-  if (!state.scenario) {
-    $('outcome-title').textContent = 'Awaiting incident';
-    $('outcome-content').innerHTML = '<p>The service is healthy. No orchestration is active.</p>';
-    return;
-  }
-  if (state.running && state.policy.status === 'NOT EVALUATED') {
-    $('outcome-title').textContent = 'Diagnosis in progress';
-    $('outcome-content').innerHTML = '<p>Diagnostic evidence is being assembled before any production action is considered.</p>';
-    return;
-  }
-  if (state.policy.status === 'AUTHORIZED') {
-    $('outcome-title').textContent = state.running ? 'Automated Remediation' : 'Verified Recovery';
-    $('outcome-content').innerHTML = `<div class="outcome-hero"><strong>${state.running ? 'PRODUCTION CHANGE AUTHORIZED' : 'AUTOMATED REMEDIATION'}</strong><span>${state.running ? 'Inside approved policy boundaries' : `Time to verified recovery: ${state.elapsedSeconds.toFixed(1)} seconds`}</span></div>
-      <div class="outcome-grid"><div><span>Deployment</span><b>${state.service.deployment}</b></div><div><span>HTTP 5xx</span><b>${pct(state.service.errorRate)}</b></div><div><span>Kubernetes</span><b>${state.service.readyReplicas} / ${state.service.desiredReplicas} Ready</b></div><div><span>Human intervention</span><b>${state.service.humanIntervention || 'NONE'}</b></div></div>`;
-    return;
-  }
-  if (state.policy.status === 'BLOCKED') {
-    const pkg = state.diagnosticPackage;
-    $('outcome-title').textContent = 'Human Intervention Required';
-    $('outcome-content').innerHTML = `<div class="outcome-hero blocked"><strong>AUTOMATED ACTION: BLOCKED</strong><span>Outside Approved Remediation Policy</span></div>${pkg ? `<div class="outcome-grid"><div><span>5xx rate</span><b>${pct(pkg.elevated_5xx_rate)}</b></div><div><span>Recent deployment</span><b>NONE</b></div><div><span>Kubernetes</span><b>${pkg.kubernetes_readiness} Ready</b></div><div><span>Error signature</span><b>${pkg.error_signature}</b></div><div><span>Policy result</span><b>${pkg.policy_result}</b></div><div><span>Production action</span><b>${pkg.production_action}</b></div></div>` : '<p>Policy evaluation blocked the production change.</p>'}`;
-  }
-}
-
 function render(state) {
   currentState = state;
   document.body.classList.toggle('running', state.running);
-  $('service-status').textContent = state.service.status;
-  $('service-status').className = `status ${state.service.status.toLowerCase()}`;
-  $('health-dot').style.background = state.service.status === 'HEALTHY' ? 'var(--green)' : state.service.status === 'CRITICAL' ? 'var(--red)' : 'var(--amber)';
-  $('deployment').textContent = state.service.deployment;
-  $('error-rate').textContent = pct(state.service.errorRate);
-  $('replicas').textContent = `${state.service.readyReplicas} / ${state.service.desiredReplicas} Ready`;
-  $('active-incident').textContent = state.incident ? `${state.incident.number} · ${state.incident.state_label}` : 'No active incident';
-  const elapsed = state.startedAt ? (state.running ? (Date.now() - new Date(state.startedAt).getTime()) / 1000 : state.elapsedSeconds) : null;
-  $('elapsed').textContent = elapsed === null ? '—' : `${elapsed.toFixed(1)} sec`;
   $('orchestrator-status').textContent = state.orchestrator.status;
   $('orchestrator-detail').textContent = state.orchestrator.detail;
   $('known-button').disabled = state.running;
@@ -103,7 +67,6 @@ function render(state) {
   renderPolicy(state.policy);
   renderSystems(state);
   renderTimeline(state.timeline);
-  renderOutcome(state);
   if (inspectorSystem && !$('inspector').hidden) renderInspector(inspectorSystem, inspectorSelectedIndex);
 }
 
@@ -159,4 +122,3 @@ $('reset-button').addEventListener('click', () => action('/api/demo/reset').catc
 
 fetchState();
 setInterval(fetchState, 300);
-elapsedTimer = setInterval(() => { if (currentState?.running) render(currentState); }, 100);
