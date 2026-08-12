@@ -1,5 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
 const { server, evaluatePolicy } = require('../server');
 
 let base;
@@ -87,4 +89,13 @@ test('external simulated service APIs return structured JSON', async () => {
   assert.equal(argo.body.application, 'billing-service');
   assert.equal(kube.body.pods.length, 6);
   assert.deepEqual(snow.body.result, []);
+});
+
+test('presentation uses the official logo and preserves payload history selection', () => {
+  const html = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
+  const app = fs.readFileSync(path.join(__dirname, '..', 'public', 'app.js'), 'utf8');
+  assert.match(html, /kestra-monogram\.svg/);
+  assert.doesNotMatch(html, /Kestra Solution Simulation|Simulated enterprise systems|Production control plane/);
+  assert.match(app, /inspectorSelectedIndex/);
+  assert.match(app, /renderInspector\(inspectorSystem, inspectorSelectedIndex\)/);
 });

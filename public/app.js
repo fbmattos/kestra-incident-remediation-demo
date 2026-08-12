@@ -2,6 +2,7 @@ const $ = (id) => document.getElementById(id);
 const systemNames = { datadog: 'Datadog', argocd: 'Argo CD', kubernetes: 'Kubernetes', servicenow: 'ServiceNow' };
 let currentState;
 let inspectorSystem = null;
+let inspectorSelectedIndex = null;
 let elapsedTimer;
 
 function clock(iso, withDate = false) {
@@ -103,7 +104,7 @@ function render(state) {
   renderSystems(state);
   renderTimeline(state.timeline);
   renderOutcome(state);
-  if (inspectorSystem && !$('inspector').hidden) renderInspector(inspectorSystem);
+  if (inspectorSystem && !$('inspector').hidden) renderInspector(inspectorSystem, inspectorSelectedIndex);
 }
 
 async function fetchState() {
@@ -134,8 +135,9 @@ function renderInspector(system, selectedIndex) {
     return;
   }
   const index = selectedIndex ?? history.length - 1;
-  const item = history[index];
-  $('history-tabs').innerHTML = history.map((entry, i) => `<button class="${i === index ? 'active' : ''}" data-history-index="${i}">${i + 1}. ${entry.summary}</button>`).join('');
+  inspectorSelectedIndex = Math.min(index, history.length - 1);
+  const item = history[inspectorSelectedIndex];
+  $('history-tabs').innerHTML = history.map((entry, i) => `<button class="${i === inspectorSelectedIndex ? 'active' : ''}" data-history-index="${i}">${i + 1}. ${entry.summary}</button>`).join('');
   $('request-meta').innerHTML = `<span class="method">${item.method}</span><span>${item.endpoint}</span><span class="response-ok">${item.responseStatus}</span><time>${clock(item.timestamp, true)}</time>`;
   $('request-section').hidden = !item.request;
   $('request-json').innerHTML = syntax(item.request);
@@ -145,11 +147,12 @@ function renderInspector(system, selectedIndex) {
 
 document.querySelectorAll('[data-payload]').forEach((button) => button.addEventListener('click', () => {
   $('inspector').hidden = false;
+  inspectorSelectedIndex = null;
   renderInspector(button.dataset.payload);
 }));
-$('close-inspector').addEventListener('click', () => { $('inspector').hidden = true; inspectorSystem = null; });
-$('inspector').addEventListener('click', (event) => { if (event.target === $('inspector')) { $('inspector').hidden = true; inspectorSystem = null; } });
-document.addEventListener('keydown', (event) => { if (event.key === 'Escape') { $('inspector').hidden = true; inspectorSystem = null; } });
+$('close-inspector').addEventListener('click', () => { $('inspector').hidden = true; inspectorSystem = null; inspectorSelectedIndex = null; });
+$('inspector').addEventListener('click', (event) => { if (event.target === $('inspector')) { $('inspector').hidden = true; inspectorSystem = null; inspectorSelectedIndex = null; } });
+document.addEventListener('keydown', (event) => { if (event.key === 'Escape') { $('inspector').hidden = true; inspectorSystem = null; inspectorSelectedIndex = null; } });
 $('known-button').addEventListener('click', () => action('/api/demo/known-failure').catch(console.error));
 $('unknown-button').addEventListener('click', () => action('/api/demo/unknown-failure').catch(console.error));
 $('reset-button').addEventListener('click', () => action('/api/demo/reset').catch(console.error));
