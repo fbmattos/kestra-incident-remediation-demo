@@ -1,87 +1,102 @@
 # Kestra Governed Incident Remediation — Proof of Value Simulator
 
-A polished, local Proof of Value simulation environment showing how Kestra can coordinate diagnosis, governed remediation, verification, escalation, and operational evidence across an enterprise toolchain.
+A local Proof of Value environment demonstrating governed incident remediation across a fictional Digital Commerce Platform & SRE architecture.
 
-> **Fictional Proof of Value scenario. All incident data, architecture assumptions, and operational metrics are simulated for demonstration purposes.** Target is used only as a fictional prospect context. This project does not use Target branding and does not represent a real Target system or engagement.
+> **Fictional Proof of Value scenario.** Target and all incident data, architecture assumptions, and operational metrics are simulated for demonstration purposes. This project does not represent a real Target system or engagement.
 
-## What the demo proves
+## Runtime architecture
 
-The fictional Digital Commerce Platform & SRE organization operates a revenue-critical `billing-service`. Datadog, Argo CD, Kubernetes, and ServiceNow already automate their own domains, but incident response between them is manually coordinated. The simulator demonstrates two outcomes:
-
-- **Known deployment regression:** structured diagnostics match an approved policy, a rollback from `billing-v42` to `billing-v41` is authorized, health is verified, and the original ServiceNow incident is resolved.
-- **Unknown production failure:** the evidence falls outside the Approved Automation Envelope, no production-changing action runs, and the original incident is escalated with diagnostic context.
-
-The core point is governed automation that knows when not to act—not automation for its own sake.
-
-## Architecture
-
-The application intentionally uses one dependency-free Node.js process:
+Kestra is the real orchestration layer. The surrounding enterprise systems remain deterministic, in-memory simulations:
 
 ```text
-Browser SPA ──polls──> In-memory simulation state
-                         ▲
-Datadog ──event──> Orchestration adapter ──> Argo CD
-                         │                  Kubernetes
-                         └────────────────> ServiceNow
+Browser
+  → PoV simulator at localhost:3000 establishes an incident condition
+  → server sends a simulated Datadog event to Kestra at localhost:8080
+  → real Kestra execution calls host.docker.internal:3000
+  → simulated system APIs mutate in-memory state
+  → browser polls simulator state and displays the real execution's progress
 ```
 
-- `server.js` serves static assets and exposes the simulated JSON APIs.
-- `SimulatedOrchestrationAdapter` in `server.js` runs the deterministic orchestration sequence behind a clean boundary.
-- `public/` contains the single-page presentation UI.
-- State and one persistent incident object live in memory; reset always restores the same healthy baseline.
-- The server binds to `0.0.0.0` on port `4173`, allowing a future Kestra container to reach it through `host.docker.internal:4173`.
-- API responses include permissive local CORS headers to avoid constraining the next integration phase.
+| Component | Mode | Responsibility |
+| --- | --- | --- |
+| Kestra | **Real** | Workflow execution, parallel diagnostics, policy evaluation, branching, and sequencing |
+| Datadog | Simulated | Alert payloads and service health |
+| Argo CD | Simulated | Deployment history and rollback action |
+| Kubernetes | Simulated | Workload and pod readiness |
+| ServiceNow | Simulated | Persistent incident creation and update |
+| GitHub | **Real** | Flow and application version control |
 
-No database, Docker container, external service, or runtime network access is required.
+The application does not advance orchestration with timers or a fake adapter. After it submits the Datadog webhook, only callbacks from the real Kestra execution can gather diagnostics, publish a policy decision, roll back, verify recovery, or complete the incident.
 
-## Simulated systems and APIs
+## Prerequisites and environment
 
-The UI displays realistic request/response history for Datadog, Argo CD, Kubernetes, and ServiceNow. Representative externally callable endpoints include:
+- Node.js 20 or newer
+- Kestra running locally at `http://localhost:8080`
+- The committed `demo.incident.governed_incident_remediation` flow available in Kestra
+- Kestra secret `INCIDENT_WEBHOOK_KEY` configured for that flow's webhook trigger
 
-```text
-POST /api/demo/reset
-POST /api/demo/known-failure
-POST /api/demo/unknown-failure
-GET  /api/state
+Copy the example configuration:
 
-POST /api/datadog/alert
-GET  /api/datadog/health
-GET  /api/argocd/application
-POST /api/argocd/rollback
-GET  /api/kubernetes/deployment
-GET  /api/servicenow/incidents
-POST /api/servicenow/incidents
-PATCH /api/servicenow/incidents/:id
+```bash
+cp .env.example .env.local
 ```
 
-GitHub and HashiCorp Vault appear only as non-interactive production control-plane context. They are not fake products in the simulator.
+Set the same local webhook secret configured in Kestra:
 
-## Run locally
+```dotenv
+KESTRA_BASE_URL=http://localhost:8080
+KESTRA_WEBHOOK_KEY=your-local-secret
+```
 
-Requires Node.js 20 or newer.
+`.env.local` and other local environment files are ignored by Git. Never commit the webhook key.
+
+## Start
 
 ```bash
 npm start
 ```
 
-Open **http://localhost:4173**.
+Open **http://localhost:3000**.
 
-For automatic server restarts during development:
+The server binds to `0.0.0.0:3000`, allowing Kestra in Docker Desktop to call it at `http://host.docker.internal:3000`. Confirm Docker-to-host connectivity from the appropriate environment with:
 
-```bash
-npm run dev
+```text
+GET http://host.docker.internal:3000/api/health
 ```
 
-No `npm install` is required because the application has no third-party packages.
+Expected response:
 
-## Demo operation
+```json
+{
+  "status": "ok",
+  "service": "kestra-pov-simulator"
+}
+```
 
-1. Click **Simulate known deployment regression** and follow the Live Interaction Timeline through Verified Recovery.
-2. Click **Reset simulation** to return to the deterministic healthy baseline.
-3. Click **Simulate unknown production failure** and observe the policy block plus Human Intervention Required outcome.
-4. Use **View payload** on any system card to inspect its complete interaction history, HTTP metadata, requests, and responses.
+## Run the demo
 
-The two scenario controls are disabled while a run is active. Reset can interrupt any run and always returns the app to its initial state, so the demo can be repeated without restarting the server.
+1. Click **Simulate known deployment regression**. The backend establishes the 17.8% 5xx / 3-of-6 state and sends the event to the real Kestra webhook. Kestra creates one incident, gathers three diagnostics in parallel, authorizes policy, invokes the simulated Argo CD rollback, verifies recovery, and resolves that same incident.
+2. Click **Reset simulation**. This clears the execution ID, incident, policy, timeline, and every interaction/payload history.
+3. Click **Simulate unknown production failure**. Kestra sees the 21.4% 5xx / 5-of-6 state, blocks remediation, never calls rollback, and escalates the same incident with diagnostic context.
+4. Use **View payload** on any system card to inspect calls made during the real execution.
+
+Concurrent scenario starts return HTTP 409. If the Kestra webhook cannot be reached or rejects the event, the central card reports a connection error and the scenario buttons are re-enabled.
+
+## API contract
+
+The real flow at `kestra/flows/governed_incident_remediation.yml` calls:
+
+```text
+POST /api/servicenow/incidents
+GET  /api/datadog/health
+GET  /api/argocd/application
+GET  /api/kubernetes/deployment
+POST /api/kestra/policy-decision
+POST /api/argocd/rollback
+PUT  /api/servicenow/incidents/:sysId
+```
+
+Kestra supplies `X-Kestra-Execution-Id` and `X-Kestra-Phase`. The simulator captures both in payload history and rejects invalid or conflicting callbacks.
 
 ## Tests
 
@@ -89,15 +104,12 @@ The two scenario controls are disabled while a run is active. Reset can interrup
 npm test
 ```
 
-The tests execute both scenarios through their HTTP controls, validate same-incident create/update behavior, check parallel diagnostic timestamps, confirm unknown failures produce no Argo CD production action, exercise resets, and inspect the structured service APIs.
+The test suite uses a local webhook receiver to verify that scenario start stops after submitting to Kestra, then drives the exact flow callback contract for authorized and blocked paths. It also checks reset determinism, same-incident updates, rollback exclusion from the blocked path, health, validation errors, and the live-Kestra UI semantics.
 
-## Future real Kestra integration
+## Kestra artifacts
 
-This version explicitly uses a **simulated orchestration adapter**. It is not connected to the local Kestra instance. In the next phase, replace `SimulatedOrchestrationAdapter` in `server.js` with an adapter that submits or receives real Kestra webhook execution events. From Kestra running in Docker, the simulator will be reachable at approximately `http://host.docker.internal:4173`.
+The `kestra/` directory contains the real, version-controlled Kestra flow and dashboard definitions. In particular:
 
-## Existing Kestra artifacts
-
-The committed `kestra/` directory contains the actual Kestra flow and dashboard work that predates this simulator. Those files are intentionally preserved and remain separate from the simulated adapter:
-
-- `kestra/flows/incident_remediation_sanity.yml`
-- `kestra/dashboards/Incident Remediation Operations.yml`
+- `kestra/flows/governed_incident_remediation.yml` — real webhook-driven orchestration used by this application
+- `kestra/flows/incident_remediation_sanity.yml` — earlier workflow sanity artifact
+- `kestra/dashboards/Incident Remediation Operations.yml` — operational dashboard
