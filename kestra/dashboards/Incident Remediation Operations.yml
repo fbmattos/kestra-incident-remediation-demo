@@ -24,7 +24,7 @@ charts:
           value: "demo.incident"
         - field: FLOW_ID
           type: EQUAL_TO
-          value: "incident_remediation_sanity"
+          value: "governed_incident_remediation"
 
   - id: workflow_success_ratio
     type: io.kestra.plugin.core.dashboard.chart.KPI
@@ -48,7 +48,7 @@ charts:
           value: "demo.incident"
         - field: FLOW_ID
           type: EQUAL_TO
-          value: "incident_remediation_sanity"
+          value: "governed_incident_remediation"
 
   - id: execution_state
     type: io.kestra.plugin.core.dashboard.chart.Pie
@@ -73,7 +73,7 @@ charts:
           value: "demo.incident"
         - field: FLOW_ID
           type: EQUAL_TO
-          value: "incident_remediation_sanity"
+          value: "governed_incident_remediation"
 
   - id: incident_workflows_over_time
     type: io.kestra.plugin.core.dashboard.chart.TimeSeries
@@ -102,7 +102,7 @@ charts:
           value: "demo.incident"
         - field: FLOW_ID
           type: EQUAL_TO
-          value: "incident_remediation_sanity"
+          value: "governed_incident_remediation"
 
   - id: recent_incident_workflows
     type: io.kestra.plugin.core.dashboard.chart.Table
@@ -129,7 +129,7 @@ charts:
           value: "demo.incident"
         - field: FLOW_ID
           type: EQUAL_TO
-          value: "incident_remediation_sanity"
+          value: "governed_incident_remediation"
       orderBy:
         - column: started
           order: DESC
