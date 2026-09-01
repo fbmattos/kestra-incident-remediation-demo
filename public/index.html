@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Fictional Kestra governed incident remediation Proof of Value simulation">
+  <title>Governed Incident Remediation for Target</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <div class="shell">
+    <header class="topbar">
+      <div class="brand-block">
+        <img class="official-logo" src="/kestra-monogram.svg" alt="Kestra">
+        <div>
+          <p class="eyebrow">Proof of Value Simulation</p>
+          <h1>Governed Incident Remediation for Target</h1>
+        </div>
+      </div>
+      <div class="header-meta">
+        <span class="fictional-badge">Fictional Proof of Value scenario</span>
+      </div>
+    </header>
+
+    <main>
+      <section class="controls" aria-label="Simulation controls">
+        <div><span class="section-kicker">Demo controls</span></div>
+        <button class="button primary" id="known-button"><span class="button-icon">↘</span> Simulate known deployment regression</button>
+        <button class="button danger" id="unknown-button"><span class="button-icon">!</span> Simulate unknown production failure</button>
+        <button class="button ghost" id="reset-button"><span class="button-icon">↺</span> Reset simulation</button>
+      </section>
+
+      <section class="architecture" aria-label="Orchestration architecture">
+        <article class="system-card datadog-card" data-system="datadog">
+          <div class="card-head"><div class="system-icon dd">D</div><div><h2>Datadog</h2><p>Observability & alerting</p></div><span class="state-chip" id="datadog-state">Monitoring</span></div>
+          <div class="card-body"><span>Latest interaction</span><strong id="datadog-latest">Health baseline established</strong><time id="datadog-time">—</time></div>
+          <button class="payload-button" data-payload="datadog">View payload <span>→</span></button>
+        </article>
+
+        <div class="connector connector-in"><span>EVENT</span><i></i></div>
+
+        <article class="kestra-card">
+          <div class="simulation-ribbon">LIVE KESTRA</div>
+          <div class="kestra-head"><img class="official-logo card-logo" src="/kestra-monogram.svg" alt=""><div><h2>Kestra</h2><p>Orchestration layer</p></div></div>
+          <div class="orchestrator-state"><span>Current state</span><strong id="orchestrator-status">Waiting</strong><p id="orchestrator-detail">Ready for a scenario</p></div>
+          <div class="policy-block">
+            <div class="policy-title"><div><span>Approved Automation Envelope</span><strong>Policy Evaluation</strong></div><b id="policy-status" class="not-evaluated">NOT EVALUATED</b></div>
+            <div id="policy-checks" class="policy-checks"><p class="empty-policy">Structured diagnostics determine whether a production change is permitted.</p></div>
+          </div>
+        </article>
+
+        <div class="connector connector-out"><span>COORDINATE</span><i></i></div>
+
+        <div class="system-stack">
+          <article class="system-card compact" data-system="argocd">
+            <div class="card-head"><div class="system-icon argo">A</div><div><h2>Argo CD</h2><p>Deployment & GitOps</p></div><span class="state-chip" id="argocd-state">Synced</span></div>
+            <div class="card-body"><span>Latest interaction</span><strong id="argocd-latest">billing-v42 active</strong><time id="argocd-time">—</time></div>
+            <button class="payload-button" data-payload="argocd">View payload <span>→</span></button>
+          </article>
+          <article class="system-card compact" data-system="kubernetes">
+            <div class="card-head"><div class="system-icon kube">K</div><div><h2>Kubernetes</h2><p>Application runtime</p></div><span class="state-chip" id="kubernetes-state">6 / 6</span></div>
+            <div class="card-body"><span>Latest interaction</span><strong id="kubernetes-latest">All replicas Ready</strong><time id="kubernetes-time">—</time></div>
+            <button class="payload-button" data-payload="kubernetes">View payload <span>→</span></button>
+          </article>
+          <article class="system-card compact" data-system="servicenow">
+            <div class="card-head"><div class="system-icon snow">S</div><div><h2>ServiceNow</h2><p>Incident management</p></div><span class="state-chip" id="servicenow-state">No incident</span></div>
+            <div class="card-body"><span>Latest interaction</span><strong id="servicenow-latest">Awaiting event</strong><time id="servicenow-time">—</time></div>
+            <button class="payload-button" data-payload="servicenow">View payload <span>→</span></button>
+          </article>
+        </div>
+      </section>
+
+      <section class="lower-grid">
+        <article class="timeline-panel">
+          <div class="panel-heading"><div><span class="section-kicker">Runtime evidence</span><h2>Live Interaction Timeline</h2></div><span class="live-indicator" id="live-indicator"><i></i> IDLE</span></div>
+          <div id="timeline" class="timeline"><div class="empty-state"><span>◇</span><p>Run a scenario to observe governed orchestration across systems.</p></div></div>
+        </article>
+      </section>
+
+    </main>
+  </div>
+
+  <div class="inspector-backdrop" id="inspector" hidden>
+    <aside class="inspector" role="dialog" aria-modal="true" aria-labelledby="inspector-title">
+      <div class="inspector-head"><div><span class="section-kicker">Machine-level evidence</span><h2 id="inspector-title">Interaction history</h2></div><button id="close-inspector" aria-label="Close payload inspector">×</button></div>
+      <div class="history-tabs" id="history-tabs"></div>
+      <div class="request-meta" id="request-meta"></div>
+      <div class="json-section" id="request-section"><div class="json-label">Request payload</div><pre id="request-json"></pre></div>
+      <div class="json-section"><div class="json-label">Response JSON</div><pre id="response-json"></pre></div>
+    </aside>
+  </div>
+  <script src="/app.js"></script>
+</body>
+</html>

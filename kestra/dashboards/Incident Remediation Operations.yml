@@ -1,0 +1,158 @@
+id: Incident Remediation Operations
+title: Incident Remediation Operations
+description: Operational visibility for the incident remediation demo.
+
+timeWindow:
+  default: P7D
+  max: P365D
+
+charts:
+
+  - id: total_incident_workflows
+    type: io.kestra.plugin.core.dashboard.chart.KPI
+    chartOptions:
+      displayName: Total Incident Workflows
+      width: 3
+    data:
+      type: io.kestra.plugin.core.dashboard.data.ExecutionsKPI
+      columns:
+        field: ID
+        agg: COUNT
+      where:
+        - field: NAMESPACE
+          type: EQUAL_TO
+          value: "demo.incident"
+        - field: FLOW_ID
+          type: EQUAL_TO
+          value: "governed_incident_remediation"
+
+  - id: workflow_success_ratio
+    type: io.kestra.plugin.core.dashboard.chart.KPI
+    chartOptions:
+      displayName: Workflow Success Rate
+      numberType: PERCENTAGE
+      width: 3
+    data:
+      type: io.kestra.plugin.core.dashboard.data.ExecutionsKPI
+      columns:
+        field: ID
+        agg: COUNT
+      numerator:
+        - field: STATE
+          type: IN
+          values:
+            - SUCCESS
+      where:
+        - field: NAMESPACE
+          type: EQUAL_TO
+          value: "demo.incident"
+        - field: FLOW_ID
+          type: EQUAL_TO
+          value: "governed_incident_remediation"
+
+  - id: execution_state
+    type: io.kestra.plugin.core.dashboard.chart.Pie
+    chartOptions:
+      displayName: Workflow Execution State
+      description: Kestra execution status for incident-remediation workflows
+      graphStyle: DONUT
+      colorByColumn: state
+      legend:
+        enabled: true
+    data:
+      type: io.kestra.plugin.core.dashboard.data.Executions
+      columns:
+        state:
+          field: STATE
+        total:
+          displayName: Executions
+          agg: COUNT
+      where:
+        - field: NAMESPACE
+          type: EQUAL_TO
+          value: "demo.incident"
+        - field: FLOW_ID
+          type: EQUAL_TO
+          value: "governed_incident_remediation"
+
+  - id: incident_workflows_over_time
+    type: io.kestra.plugin.core.dashboard.chart.TimeSeries
+    chartOptions:
+      displayName: Incident Workflows Over Time
+      description: Incident-remediation workflow executions
+      column: date
+      colorByColumn: state
+      legend:
+        enabled: true
+    data:
+      type: io.kestra.plugin.core.dashboard.data.Executions
+      columns:
+        date:
+          field: START_DATE
+          displayName: Date
+        state:
+          field: STATE
+        total:
+          displayName: Executions
+          agg: COUNT
+          graphStyle: BARS
+      where:
+        - field: NAMESPACE
+          type: EQUAL_TO
+          value: "demo.incident"
+        - field: FLOW_ID
+          type: EQUAL_TO
+          value: "governed_incident_remediation"
+
+  - id: recent_incident_workflows
+    type: io.kestra.plugin.core.dashboard.chart.Table
+    chartOptions:
+      displayName: Recent Incident Workflows
+    data:
+      type: io.kestra.plugin.core.dashboard.data.Executions
+      columns:
+        execution:
+          field: ID
+          displayName: Execution
+        started:
+          field: START_DATE
+          displayName: Started
+        state:
+          field: STATE
+          displayName: State
+        duration:
+          field: DURATION
+          displayName: Duration
+      where:
+        - field: NAMESPACE
+          type: EQUAL_TO
+          value: "demo.incident"
+        - field: FLOW_ID
+          type: EQUAL_TO
+          value: "governed_incident_remediation"
+      orderBy:
+        - column: started
+          order: DESC
+
+  - id: dashboard_context
+    type: io.kestra.plugin.core.dashboard.chart.Markdown
+    chartOptions:
+      displayName: Incident Automation
+    source:
+      type: Text
+      content: |
+        ## Governed Incident Remediation
+
+        This dashboard tracks the Kestra workflows coordinating production incident response.
+
+        **Current proof points**
+        - Event-driven remediation workflow
+        - Parallel diagnosis
+        - Controlled remediation or escalation
+        - Central execution history
+
+        **Next metrics to add**
+        - Auto-remediation rate
+        - Human escalation rate
+        - Time to diagnosis
+        - Time to verified recovery

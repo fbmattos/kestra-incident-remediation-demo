@@ -1,0 +1,331 @@
+id: governed_incident_remediation
+namespace: demo.incident
+
+description: |
+  Governed incident remediation for the Target Proof of Value simulation.
+
+  Receives a simulated Datadog production alert, creates a ServiceNow incident,
+  gathers evidence from Datadog, Argo CD and Kubernetes in parallel, evaluates
+  an approved remediation policy, and either performs and verifies a rollback
+  or escalates to the SRE team without changing production.
+
+variables:
+  simulatorBaseUrl: "http://host.docker.internal:3000"
+
+tasks:
+
+  - id: receive_alert
+    type: io.kestra.plugin.core.log.Log
+    message: |
+      P1 alert received for {{ trigger.body.service }}
+      Event: {{ trigger.body.id }}
+      5xx rate: {{ trigger.body.value }}
+
+  - id: create_incident
+    type: io.kestra.plugin.core.http.Request
+    uri: "{{ vars.simulatorBaseUrl }}/api/servicenow/incidents"
+    method: POST
+    contentType: application/json
+    headers:
+      X-Kestra-Execution-Id: "{{ execution.id }}"
+      X-Kestra-Phase: incident-create
+    body: |
+      {
+        "short_description": "{{ trigger.body.title }}",
+        "priority": "1",
+        "assignment_group": "Digital Commerce SRE",
+        "correlation_id": "{{ trigger.body.id }}",
+        "service": "{{ trigger.body.service }}",
+        "environment": "{{ trigger.body.env }}",
+        "kestra_execution_id": "{{ execution.id }}"
+      }
+
+  - id: gather_diagnostics
+    type: io.kestra.plugin.core.flow.Parallel
+    tasks:
+
+      - id: datadog_diagnostics
+        type: io.kestra.plugin.core.http.Request
+        uri: "{{ vars.simulatorBaseUrl }}/api/datadog/health"
+        method: GET
+        headers:
+          X-Kestra-Execution-Id: "{{ execution.id }}"
+          X-Kestra-Phase: diagnostics
+        params:
+          service: "{{ trigger.body.service }}"
+          env: "{{ trigger.body.env }}"
+
+      - id: argocd_context
+        type: io.kestra.plugin.core.http.Request
+        uri: "{{ vars.simulatorBaseUrl }}/api/argocd/application"
+        method: GET
+        headers:
+          X-Kestra-Execution-Id: "{{ execution.id }}"
+          X-Kestra-Phase: diagnostics
+        params:
+          application: "{{ trigger.body.service }}"
+          environment: "{{ trigger.body.env }}"
+
+      - id: kubernetes_health
+        type: io.kestra.plugin.core.http.Request
+        uri: "{{ vars.simulatorBaseUrl }}/api/kubernetes/deployment"
+        method: GET
+        headers:
+          X-Kestra-Execution-Id: "{{ execution.id }}"
+          X-Kestra-Phase: diagnostics
+        params:
+          namespace: production
+          deployment: "{{ trigger.body.service }}"
+
+  - id: evaluate_policy
+    type: io.kestra.plugin.core.flow.If
+    condition: >-
+      {{
+        (outputs.datadog_diagnostics.body | jq('.http_5xx_rate') | first)
+        >=
+        (outputs.datadog_diagnostics.body | jq('.threshold') | first)
+
+        and
+
+        (outputs.argocd_context.body | jq('.recent_deployment') | first)
+        == true
+
+        and
+
+        (outputs.datadog_diagnostics.body | jq('.error_signature') | first)
+        == 'MEMORY_LEAK_AFTER_DEPLOY'
+
+        and
+
+        (outputs.argocd_context.body | jq('.previous_deployment.revision') | first)
+        != null
+      }}
+
+    then:
+
+      - id: publish_authorized_policy
+        type: io.kestra.plugin.core.http.Request
+        uri: "{{ vars.simulatorBaseUrl }}/api/kestra/policy-decision"
+        method: POST
+        contentType: application/json
+        headers:
+          X-Kestra-Execution-Id: "{{ execution.id }}"
+          X-Kestra-Phase: policy
+        body: |
+          {
+            "execution_id": "{{ execution.id }}",
+            "policy": "deployment-regression-v1",
+            "decision": "AUTHORIZED",
+            "checks": [
+              {
+                "id": "critical_error_threshold",
+                "label": "Critical error threshold",
+                "passed": true,
+                "value": "{{ outputs.datadog_diagnostics.body | jq('.http_5xx_rate') | first }}",
+                "threshold": "{{ outputs.datadog_diagnostics.body | jq('.threshold') | first }}"
+              },
+              {
+                "id": "recent_deployment",
+                "label": "Recent deployment",
+                "passed": true,
+                "value": "{{ outputs.argocd_context.body | jq('.minutes_since_deployment') | first }} minutes ago"
+              },
+              {
+                "id": "known_remediation_signature",
+                "label": "Known remediation signature",
+                "passed": true,
+                "value": "{{ outputs.datadog_diagnostics.body | jq('.error_signature') | first }}"
+              },
+              {
+                "id": "previous_stable_revision",
+                "label": "Previous stable revision available",
+                "passed": true,
+                "value": "{{ outputs.argocd_context.body | jq('.previous_deployment.version') | first }}"
+              }
+            ]
+          }
+
+      - id: rollback_application
+        type: io.kestra.plugin.core.http.Request
+        uri: "{{ vars.simulatorBaseUrl }}/api/argocd/rollback"
+        method: POST
+        contentType: application/json
+        headers:
+          X-Kestra-Execution-Id: "{{ execution.id }}"
+          X-Kestra-Phase: remediation
+        body: |
+          {
+            "application": "{{ outputs.argocd_context.body | jq('.application') | first }}",
+            "environment": "production",
+            "from_version": "{{ outputs.argocd_context.body | jq('.deployment.version') | first }}",
+            "to_version": "{{ outputs.argocd_context.body | jq('.previous_deployment.version') | first }}",
+            "target_revision": "{{ outputs.argocd_context.body | jq('.previous_deployment.revision') | first }}",
+            "kestra_execution_id": "{{ execution.id }}"
+          }
+
+      - id: wait_for_rollout
+        type: io.kestra.plugin.core.flow.Sleep
+        duration: PT2S
+
+      - id: verify_recovery
+        type: io.kestra.plugin.core.flow.Parallel
+        tasks:
+
+          - id: verify_kubernetes
+            type: io.kestra.plugin.core.http.Request
+            uri: "{{ vars.simulatorBaseUrl }}/api/kubernetes/deployment"
+            method: GET
+            headers:
+              X-Kestra-Execution-Id: "{{ execution.id }}"
+              X-Kestra-Phase: recovery-verification
+            params:
+              namespace: production
+              deployment: "{{ trigger.body.service }}"
+
+          - id: verify_datadog
+            type: io.kestra.plugin.core.http.Request
+            uri: "{{ vars.simulatorBaseUrl }}/api/datadog/health"
+            method: GET
+            headers:
+              X-Kestra-Execution-Id: "{{ execution.id }}"
+              X-Kestra-Phase: recovery-verification
+            params:
+              service: "{{ trigger.body.service }}"
+              env: "{{ trigger.body.env }}"
+
+      - id: recovery_verified
+        type: io.kestra.plugin.core.flow.If
+        condition: >-
+          {{
+            (outputs.verify_kubernetes.body | jq('.ready_replicas') | first)
+            ==
+            (outputs.verify_kubernetes.body | jq('.desired_replicas') | first)
+
+            and
+
+            (outputs.verify_datadog.body | jq('.http_5xx_rate') | first)
+            <
+            (outputs.verify_datadog.body | jq('.threshold') | first)
+          }}
+
+        then:
+
+          - id: resolve_incident
+            type: io.kestra.plugin.core.http.Request
+            uri: "{{ vars.simulatorBaseUrl }}/api/servicenow/incidents/{{ outputs.create_incident.body | jq('.result.sys_id') | first }}"
+            method: PUT
+            contentType: application/json
+            headers:
+              X-Kestra-Execution-Id: "{{ execution.id }}"
+              X-Kestra-Phase: incident-resolve
+            body: |
+              {
+                "state": "resolved",
+                "resolution": "automated_remediation",
+                "resolution_code": "deployment_rollback",
+                "close_notes": "Automated rollback completed and post-remediation health verification passed.",
+                "restored_version": "{{ outputs.argocd_context.body | jq('.previous_deployment.version') | first }}",
+                "kestra_execution_id": "{{ execution.id }}"
+              }
+
+        else:
+
+          - id: escalate_failed_remediation
+            type: io.kestra.plugin.core.http.Request
+            uri: "{{ vars.simulatorBaseUrl }}/api/servicenow/incidents/{{ outputs.create_incident.body | jq('.result.sys_id') | first }}"
+            method: PUT
+            contentType: application/json
+            headers:
+              X-Kestra-Execution-Id: "{{ execution.id }}"
+              X-Kestra-Phase: incident-escalate
+            body: |
+              {
+                "state": "human_intervention_required",
+                "assignment_group": "Digital Commerce SRE",
+                "reason": "Automated remediation failed recovery verification",
+                "automated_action": "rollback_attempted",
+                "kestra_execution_id": "{{ execution.id }}"
+              }
+
+    else:
+
+      - id: publish_blocked_policy
+        type: io.kestra.plugin.core.http.Request
+        uri: "{{ vars.simulatorBaseUrl }}/api/kestra/policy-decision"
+        method: POST
+        contentType: application/json
+        headers:
+          X-Kestra-Execution-Id: "{{ execution.id }}"
+          X-Kestra-Phase: policy
+        body: |
+          {
+            "execution_id": "{{ execution.id }}",
+            "policy": "deployment-regression-v1",
+            "decision": "BLOCKED",
+            "checks": [
+              {
+                "id": "critical_error_threshold",
+                "label": "Critical error threshold",
+                "passed": {{
+                  (outputs.datadog_diagnostics.body | jq('.http_5xx_rate') | first)
+                  >=
+                  (outputs.datadog_diagnostics.body | jq('.threshold') | first)
+                }},
+                "value": "{{ outputs.datadog_diagnostics.body | jq('.http_5xx_rate') | first }}",
+                "threshold": "{{ outputs.datadog_diagnostics.body | jq('.threshold') | first }}"
+              },
+              {
+                "id": "recent_deployment",
+                "label": "Recent deployment",
+                "passed": {{ outputs.argocd_context.body | jq('.recent_deployment') | first }},
+                "value": "{{ outputs.argocd_context.body | jq('.recent_deployment_description') | first }}"
+              },
+              {
+                "id": "known_remediation_signature",
+                "label": "Known remediation signature",
+                "passed": {{
+                  (outputs.datadog_diagnostics.body | jq('.error_signature') | first)
+                  == 'MEMORY_LEAK_AFTER_DEPLOY'
+                }},
+                "value": "{{ outputs.datadog_diagnostics.body | jq('.error_signature') | first }}"
+              },
+              {
+                "id": "previous_stable_revision",
+                "label": "Previous stable revision available",
+                "passed": {{
+                  (outputs.argocd_context.body | jq('.previous_deployment.revision') | first)
+                  != null
+                }},
+                "value": "{{ outputs.argocd_context.body | jq('.previous_deployment.version') | first }}"
+              }
+            ]
+          }
+
+      - id: escalate_unknown_incident
+        type: io.kestra.plugin.core.http.Request
+        uri: "{{ vars.simulatorBaseUrl }}/api/servicenow/incidents/{{ outputs.create_incident.body | jq('.result.sys_id') | first }}"
+        method: PUT
+        contentType: application/json
+        headers:
+          X-Kestra-Execution-Id: "{{ execution.id }}"
+          X-Kestra-Phase: incident-escalate
+        body: |
+          {
+            "state": "human_intervention_required",
+            "assignment_group": "Digital Commerce SRE",
+            "reason": "Outside approved remediation policy",
+            "automated_action": "none",
+            "diagnostic_context": {
+              "http_5xx_rate": {{ outputs.datadog_diagnostics.body | jq('.http_5xx_rate') | first }},
+              "error_signature": "{{ outputs.datadog_diagnostics.body | jq('.error_signature') | first }}",
+              "recent_deployment": {{ outputs.argocd_context.body | jq('.recent_deployment') | first }},
+              "ready_replicas": {{ outputs.kubernetes_health.body | jq('.ready_replicas') | first }},
+              "desired_replicas": {{ outputs.kubernetes_health.body | jq('.desired_replicas') | first }}
+            },
+            "kestra_execution_id": "{{ execution.id }}"
+          }
+
+triggers:
+  - id: datadog_webhook
+    type: io.kestra.plugin.core.trigger.Webhook
+    key: "{{ secret('INCIDENT_WEBHOOK_KEY') }}"
